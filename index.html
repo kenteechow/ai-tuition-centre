@@ -1035,6 +1035,10 @@ body.shadowing .kpi .k::before{content:'隔籬 · ';color:var(--warn)}
 .democard{left:calc(max(16px,env(safe-area-inset-left,0px)) + min(330px,40vw) + 12px);bottom:calc(68px + env(safe-area-inset-bottom,0px));width:min(360px,calc(100vw - min(330px,40vw) - 60px))}
 @media (max-width:860px){.democard{left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));width:auto;top:calc(76px + env(safe-area-inset-top,0px));bottom:auto}}
 
+/* 時間表：紅色係已有撞堂，黃色係同級參考。 */
+.ttc.conf{outline:3px solid #ed5b5b;outline-offset:-1px;animation:none}
+.lg.conf{outline:2px solid #ed5b5b;outline-offset:-2px}
+
 .toast{bottom:auto;top:calc(100px + env(safe-area-inset-top,0px))}
 @media (max-width:860px){.toast{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px))}}
 .pausebadge{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);font-size:16px;padding:6px 14px}
@@ -3875,7 +3879,7 @@ function ttLegend(){const used=new Set(s.classes.map(k=>subjOf(k.c,k.g))),types=
   const subs=Object.keys(SUBJ_DEF).filter(k=>used.has(k));
   return `<div class="ttleg"><div class="lgrow"><b>科目</b>${subs.map(k=>`<span class="lgs s-${k}">${subjIcon(k)}${SUBJ_DEF[k][0]}</span>`).join('')||'<span>未有班</span>'}</div>
    <div class="lgrow"><b>類型</b><small class="lgnote">左邊線：實線補習 · 虛線興趣班 · 雙線功課班；DSE 顏色較深</small>${['pri','jun','dse','hw','int','sum'].filter(x=>types.has(x)||x==='pri'||x==='dse'||x==='int').map(x=>`<span class="lgty sx t-${x}">${TYPE_NAME[x]}</span>`).join('')}</div>
-   <div class="lgrow"><b>標記</b><span><i class="lg conf"></i>同級撞堂（閃黃）</span>${focusGroup()?`<span><i class="lg lvw"></i>${focusGroup().n}：同級有堂嘅時段</span>`:''}<span><i class="lg mand"></i>你開嘅班</span><span><i class="lg nowl"></i>而家</span><span><i class="lg coldl"></i>冷門時段</span><span>＋ 開新班 · 斜線 = 系統唔會自動排</span></div></div>`}
+   <div class="lgrow"><b>標記</b><span><i class="lg conf"></i>已有同級撞堂（紅色）</span>${focusGroup()?`<span><i class="lg lvw"></i>${focusGroup().n}：同級參考（黃色）</span>`:''}<span><i class="lg mand"></i>你開嘅班</span><span><i class="lg nowl"></i>而家</span><span><i class="lg coldl"></i>冷門時段</span><span>＋ 開新班 · 斜線 = 系統唔會自動排</span></div></div>`}
 function ttGrid(bad){
   const rowsDef=[['16:00',d=>d<5?0:null],['17:45',d=>d<5?1:null],['19:30',d=>d<5?2:null]];
   const hN=holNow(),hl=hN&&hN.id!=='summer'?'假期':'暑期';if(month()>=10||hN){const hr=[[hl+' 10:00',d=>d<5?'s0':null],[hl+' 11:45',d=>d<5?'s1':null],[hl+' 14:00',d=>d<5?'s2':null]];if(hN)rowsDef.unshift(...hr);else rowsDef.push(...hr)}
@@ -3916,6 +3920,15 @@ function tutorOpts(c,d,sl,ex){const C=CMAP[c],sl2=C.daily?'hw':sl,d2=C.daily?0:d
 function newClassForm(){
   const f=PANEL.form=PANEL.form||{};
   const opts=COURSES.filter(C=>!C.summer);
+  if(f.awaitChoice){
+    const recs=PANEL.recs=classRecs({d:f.d,sl:f.sl,r:f.r});
+    const groups=f.c&&GROUPS[f.c]||[];
+    return `${recs.length?`<h4>推薦開班</h4><div class="recs">${recs.map((x,i)=>`<button class="rec" data-rec="${i}"><b><span class="ovi s-${subjOf(x.c,x.g)}">${subjIcon(subjOf(x.c,x.g))}</span>${GNAME[x.c+'.'+x.g]}</b><small>${x.sl==='hw'?'星期一至五 15:30':'星期'+DAYS[x.d]+' '+slLabel(x.d,x.sl)} · ${ROOMS[x.r].id} · ${x.tid?tutorName(x.tid):'校長'}</small><span>${x.why.map(w=>`<i class="${w[1]}">${w[0]}</i>`).join('')}</span></button>`).join('')}</div>`:''}
+      <p class="eff">揀一個推薦，或者自行選擇課程同組別，先顯示同級時段參考。</p>
+      <div class="nform one"><label>課程<select data-nf="c"><option value="">請選課程</option>${opts.map(x=>`<option value="${x.id}" ${f.c===x.id?'selected':''}>${x.name}${s.courses[x.id].on?'':'（未開）'}</option>`).join('')}</select></label>
+      <label>組別<select data-nf="g" ${f.c?'':'disabled'}><option value="">請選組別</option>${groups.map(([k,n])=>`<option value="${k}">${n}</option>`).join('')}</select></label></div>
+      <div class="tifoot"><button class="btn ghost" data-selx>取消</button></div>`;
+  }
   if(!f.c||!CMAP[f.c]||CMAP[f.c].summer)f.c=opts.find(x=>!x.daily).id;
   const C=CMAP[f.c],gs=GROUPS[f.c];if(!gs.some(([k])=>k===f.g)){const best=gs.slice().sort((a,b)=>s.courses[f.c].g[b[0]].wait-s.courses[f.c].g[a[0]].wait)[0];f.g=best[0]}
   const tlist=tutorOpts(f.c,f.d,f.sl,null);
@@ -4130,6 +4143,7 @@ function trendHtml(){const tr=s.trends||[];const fm=fameTitles();return `${fm.le
 
 /* ---- v20：時間表篩選、服務覆蓋表、同級撞堂提示 ---- */
 function focusGroup(){const sel=PANEL&&PANEL.sel;if(!sel)return null;if(sel.type==='cls'){const e=selEntry(sel);if(!e)return null;const k=s.classes[e.ci];return {c:k.c,g:k.g,n:className(k)}}
+  if(sel.type==='new'&&PANEL.form&&PANEL.form.awaitChoice)return null;
   if(sel.type==='new'&&PANEL.form&&PANEL.form.c&&PANEL.form.g)return {c:PANEL.form.c,g:PANEL.form.g,n:GNAME[PANEL.form.c+'.'+PANEL.form.g]};
   if(PANEL.flt&&PANEL.flt.c&&PANEL.flt.g)return {c:PANEL.flt.c,g:PANEL.flt.g,n:GNAME[PANEL.flt.c+'.'+PANEL.flt.g]};return null}
 function ttFilterBar(){const F=PANEL.flt||{},used=new Set(s.classes.map(k=>subjOf(k.c,k.g)));
@@ -5780,9 +5794,8 @@ document.addEventListener('click',ev=>{
   if(ds.ctab){if(!PANEL||PANEL.type!=='course')PANEL={type:'course'};PANEL.tab=ds.ctab;renderPanel();pTop();return}
   const parseSel=v=>{const [d,sl,r]=v.split(',');return {d:+d,sl:isNaN(+sl)?sl:+sl,r:+r}};
   const focusTti=()=>{requestAnimationFrame(()=>{const a=$('tti'),p=pScroll();if(a&&p&&innerWidth<1000)p.scrollTop=Math.max(0,a.offsetTop-8)})};
-  if(ds.addcell){const {d,sl,r}=parseSel(ds.addcell);const f=Object.assign({},PANEL&&PANEL.form||{},{d,sl,r});
-    let best=null,bw=-1;COURSES.forEach(C=>{if(C.daily||C.summer||!isPref(C.id,d,sl))return;let w=0;for(const k in s.courses[C.id].g)w+=s.courses[C.id].g[k].wait;if(s.courses[C.id].on)w+=.5;if(w>bw){bw=w;best=C.id}});
-    if(best&&best!==f.c){f.c=best;f.g=null;f.tid=undefined}f.fromCell=true;const rc=classRecs({d,sl,r})[0];if(rc)Object.assign(f,{c:rc.c,g:rc.g,tid:rc.tid});PANEL.tab='tt';PANEL.form=f;PANEL.sel={type:'new',d,sl,r};renderPanel();focusTti();return}
+  if(ds.addcell){const {d,sl,r}=parseSel(ds.addcell);
+    PANEL.tab='tt';PANEL.form={d,sl,r,fromCell:true,awaitChoice:true};PANEL.sel={type:'new',d,sl,r};renderPanel();focusTti();return}
   if(ds.selcls){if(!PANEL||PANEL.type!=='course')PANEL={type:'course'};PANEL.tab='tt';PANEL.sel=Object.assign({type:'cls'},parseSel(ds.selcls));PANEL.cut=null;renderPanel();focusTti();return}
   if('selx' in ds){PANEL.sel=null;PANEL.cut=null;renderPanel();return}
   if(ds.newfor){const id=ds.newfor;PANEL.tab='tt';PANEL.form=freeForm(id);PANEL.sel={type:'new'};renderPanel();pTop();return}
@@ -5798,7 +5811,7 @@ document.addEventListener('click',ev=>{
   if(ds.loan){const [k,a]=ds.loan.split(':');return takeLoan(k,+a)}
   if(ds.repay)return repayLoan(+ds.repay);
   if(ds.rmfocus){const e=s.tt.find(x=>x.ci===+ds.rmfocus);if(e){PANEL={type:'course',tab:'tt',sel:{type:'cls',d:e.d,sl:e.sl,r:e.r}};renderPanel()}return}
-  if(ds.rec!=null&&PANEL&&PANEL.recs){const x=PANEL.recs[+ds.rec];if(x){Object.assign(PANEL.form,{c:x.c,g:x.g,d:x.d,sl:x.sl,r:x.r,tid:x.tid});renderPanel()}return}
+  if(ds.rec!=null&&PANEL&&PANEL.recs){const x=PANEL.recs[+ds.rec];if(x){Object.assign(PANEL.form,{c:x.c,g:x.g,d:x.d,sl:x.sl,r:x.r,tid:x.tid,awaitChoice:false});renderPanel()}return}
   if(ds.raise)return raiseTutor(+ds.raise);
   if('bossrest' in ds)return bossRest();
   if('teammeal' in ds)return teamMeal();
@@ -5833,7 +5846,7 @@ document.addEventListener('mousemove',ev=>{const g=ev.target.closest&&ev.target.
 document.addEventListener('input',ev=>{if(ev.target.matches('[data-music-volume]'))setMusicVolume(+ev.target.value/100)});
 document.addEventListener('change',ev=>{const t=ev.target;if(t.dataset&&t.dataset.rev)return setReview(t.dataset.rev,t.checked);if(t.dataset&&t.dataset.vauto!==undefined){s.vaultAuto=t.checked;log(t.checked?'開咗「現金唔夠自動由小金庫補」':'熄咗「現金唔夠自動由小金庫補」','');save();render();return}
   if(t.dataset&&t.dataset.nf&&PANEL){const f=PANEL.form=PANEL.form||{},k=t.dataset.nf,v=t.value;
-    if(k==='c'){f.c=v;f.g=null;f.tid=undefined}else if(k==='g')f.g=v;else if(k==='tid')f.tid=+v;else if(k==='r')f.r=+v;else if(k==='cell'){const [d,sl]=v.split('-').map(Number);f.d=d;f.sl=sl}
+    if(k==='c'){f.c=v;f.g=null;f.tid=undefined}else if(k==='g'){f.g=v;if(v)f.awaitChoice=false;}else if(k==='tid')f.tid=+v;else if(k==='r')f.r=+v;else if(k==='cell'){const [d,sl]=v.split('-').map(Number);f.d=d;f.sl=sl}
     t.blur();renderPanel();return}
   if(t.dataset&&t.dataset.mv&&PANEL&&PANEL.mv){const m=PANEL.mv,k=t.dataset.mv,v=t.value;
     if(k==='cell'){const [d,sl]=v.split('-').map(Number);m.d=d;m.sl=sl}else if(k==='r')m.r=+v;else if(k==='tid')m.tid=+v;
