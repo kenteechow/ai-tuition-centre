@@ -2172,6 +2172,7 @@ function computeLoads(E){
 }
 function pois(l){if(l<=0)return 0;if(l>30)return Math.max(0,Math.round(l+Math.sqrt(l)*(Math.random()+Math.random()+Math.random()-1.5)*1.4));let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random()}while(p>L);return k-1}
 function monthStart(){
+  if(s.t>0&&!s.trad&&!W3.viewShadow)playSound('money');
   bossSettle();
   if(s.cash<0&&s.tutors.length){s.flags.arrears=(s.flags.arrears||0)+1;morHit('all',-22,'遲出糧');bossHit(-12,'遲出糧');s.rep=clamp(s.rep-1.5,0,100);log(`出糧日現金唔夠，導師人工要遲出（第 ${s.flags.arrears} 次）。全部導師士氣大跌，要幾個星期先恢復。`,'bad')}
   ledgerMonthStart();const wo=Math.round(s.receivable*.25);s.receivable-=wo;s.tot.writeOff+=wo;book('writeoff',wo);
@@ -5469,8 +5470,45 @@ function dynLightsUpdate(dt,night){const D=W3.dynL;if(!D)return;D.t-=dt;const on
   D.cars.forEach((L,i)=>{const c=D.carList&&D.carList[i];if(!c||!on){L.intensity=0;L.position.set(0,-50,0);return}const r=c.r,d=c.dir,fx=r.axis==='x'?d:0,fz=r.axis==='x'?0:d,o=c.o.position;
     L.position.set(o.x+fx*(c.len/2+.1),.25,o.z+fz*(c.len/2+.1));L.target.position.set(o.x+fx*8,-.6,o.z+fz*8);L.intensity=2.2*night})}
 
+/* ============ 遊戲音效 ============ */
+let audioCtx=null;
+function playSound(kind){
+  if(OPT.sound===false)return;
+  try{
+    const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
+    if(!audioCtx)audioCtx=new Audio();
+    if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
+    const now=audioCtx.currentTime;
+    const notes=kind==='money'?[[1047,0,.12],[1319,.09,.13],[1568,.18,.25]]:
+      kind==='close'?[[520,0,.09],[390,.045,.1]]:
+      kind==='confirm'?[[660,0,.09],[880,.07,.13]]:
+      kind==='tab'?[[620,0,.055]]:[[440,0,.045]];
+    notes.forEach(([freq,delay,duration])=>{
+      const osc=audioCtx.createOscillator(),gain=audioCtx.createGain(),t=now+delay;
+      osc.type=kind==='money'?'sine':'triangle';osc.frequency.setValueAtTime(freq,t);
+      gain.gain.setValueAtTime(.0001,t);gain.gain.exponentialRampToValueAtTime(kind==='money'?.065:.035,t+.008);
+      gain.gain.exponentialRampToValueAtTime(.0001,t+duration);
+      osc.connect(gain);gain.connect(audioCtx.destination);osc.start(t);osc.stop(t+duration+.01);
+    });
+  }catch(e){}
+}
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest&&ev.target.closest('button,input[type="button"],input[type="submit"],.mclk');
+  if(!t||t.disabled||t.dataset.optsound!==undefined||t.dataset.setgo==='sound')return;
+  const d=t.dataset;
+  const kind=('closePanel' in d||'mclose' in d||d.setgo==='resume'||d.tview==='menu'||/關閉|返回/.test(t.textContent))?'close':
+    (t.classList.contains('pri')||'ch' in d||t.id==='tStart'||t.id==='tQuickAI')?'confirm':
+    (d.panel||d.stab||d.ctab||d.tsc||d.tview||d.speed!=null)?'tab':'click';
+  playSound(kind);
+},true);
+document.addEventListener('keydown',ev=>{
+  if(ev.repeat||ev.target.closest&&ev.target.closest('input,textarea,select,button'))return;
+  if(ev.key==='Escape')playSound('close');
+  else if(ev.key===' '||['1','2','3','4'].includes(ev.key))playSound('tab');
+});
+
 /* ============ 開始畫面 ============ */
-const OPT={speed:1,shadows:true};
+const OPT={speed:1,shadows:true,sound:true};
 try{Object.assign(OPT,JSON.parse(localStorage.getItem('aibx-opt')||'{}'))}catch(e){}
 if(![1,3,10].includes(OPT.speed))OPT.speed=1;
 function saveOpt(){try{localStorage.setItem('aibx-opt',JSON.stringify(OPT))}catch(e){}}
@@ -5498,7 +5536,7 @@ function renderTitle(view){
       <button class="tbtn" id="tQuickAI"><b>直接睇：全新 AI 補習社</b><small>開局 8 個崗位全部 L3，同傳統做法並排比較</small></button>
       <button class="tbtn" id="tDemo"><b>示範模式（約 10 分鐘）</b><small>一步步睇 AI 點樣幫傳統補習社：招生、補堂、出錯、對比、成果報告</small></button>
       <button class="tbtn" data-tview="help"><b>玩法說明</b><small>時間、人手、AI 等級、事件</small></button>
-      <button class="tbtn" data-tview="opt"><b>選項</b><small>預設速度、陰影、標籤</small></button>
+      <button class="tbtn" data-tview="opt"><b>選項</b><small>預設速度、陰影、標籤、音效</small></button>
      </div>
      <p class="tfoot">遊戲內數字係示範估算。背景嘅補習社可以用滑鼠拖曳旋轉。</p>`;
   }else if(view==='scen'){
@@ -5537,6 +5575,7 @@ function renderTitle(view){
     el.innerHTML=`<div class="tnav"><button class="btn ghost" data-tview="menu">‹ 返回</button><b>選項</b></div>
      <div class="topt"><span>開局預設速度</span><div class="seg">${[1,3,10].map(v=>`<button data-optspeed="${v}" class="${OPT.speed===v?'on':''}">${v}×</button>`).join('')}</div></div>
      <div class="topt"><span>陰影（舊電腦可以關）</span><div class="seg"><button data-optshadow="1" class="${OPT.shadows?'on':''}">開</button><button data-optshadow="0" class="${OPT.shadows?'':'on'}">關</button></div></div>
+     <div class="topt"><span>音效</span><div class="seg"><button data-optsound="1" class="${OPT.sound!==false?'on':''}">開</button><button data-optsound="0" class="${OPT.sound===false?'on':''}">關</button></div></div>
      <div class="topt"><span>3D 標籤</span><div class="seg"><button data-optlbl="1" class="${W3.showLabels?'on':''}">顯示</button><button data-optlbl="0" class="${W3.showLabels?'':'on'}">隱藏</button></div></div>
      <div class="topt"><span>而家用緊嘅顯示卡</span><b style="font-size:12px;text-align:right;max-width:60%;word-break:break-all">${gpuName()}</b></div>
      <p style="font-size:11.5px;color:var(--ink-3);margin:6px 0 0">遊戲已經要求瀏覽器用高效能顯示卡；如果上面仍然顯示 Intel／AMD Radeon(TM) Graphics 等內顯，要喺 Windows「設定 › 系統 › 顯示器 › 圖形」將你嘅瀏覽器（或者 Claude）設做「高效能」，再重開。</p>`;
@@ -5557,6 +5596,7 @@ document.addEventListener('click',ev=>{
   if(t.id==='tQuickAI')return startGame(SCENARIOS.find(x=>x.id==='ai'));
   if(t.id==='tDemo')return startDemo();
   if(t.id==='tContinue'){const sv=loadSaved();if(!sv)return;s=migrate(sv);prevGame=null;if(W3.ok)setEnv(s.env);hideTitle();render();startDay();setSpeed(0);return}
+  if(ds.optsound){OPT.sound=ds.optsound==='1';saveOpt();if(OPT.sound)playSound('confirm');renderTitle('opt');return}
   if(ds.optspeed){OPT.speed=+ds.optspeed;saveOpt();renderTitle('opt');return}
   if(ds.optshadow){OPT.shadows=ds.optshadow==='1';saveOpt();applyShadows();renderTitle('opt');return}
   if(ds.optlbl){if((ds.optlbl==='1')!==W3.showLabels)toggleLabels();renderTitle('opt');return}
@@ -5674,7 +5714,7 @@ function showSettings(keep){if(!keep){SET_PREV=speed||lastSpeed||1}setSpeed(0);
    <div class="setl"><button class="btn pri" data-setgo="resume">繼續遊戲</button>
     ${s.shadow?'<button class="btn" data-setgo="shadow">睇隔籬：同規模傳統補習社<small style="display:block;font-weight:400;opacity:.75">工時、開支、顧客、口碑並排比較</small></button>':''}
     <button class="btn" data-setgo="menu">回到主選單</button>
-    <div class="setsub"><button class="btn ghost" data-setgo="lbl">3D 標籤：${W3.showLabels?'開':'關'}</button><button class="btn ghost" data-setgo="cam">重設視角</button></div></div>
+    <div class="setsub"><button class="btn ghost" data-setgo="sound">音效：${OPT.sound!==false?'開':'關'}</button><button class="btn ghost" data-setgo="lbl">3D 標籤：${W3.showLabels?'開':'關'}</button><button class="btn ghost" data-setgo="cam">重設視角</button></div></div>
    <p class="eff" style="font-size:11.5px">主選單可以揀「繼續」返嚟呢局，或者開新一局。快捷鍵：Esc 開關設定，空白鍵暫停，1–4 轉速度。</p></div>`)}
 document.addEventListener('click',ev=>{
   const t=ev.target.closest('button,input,.mclk');if(!t)return;
@@ -5682,7 +5722,7 @@ document.addEventListener('click',ev=>{
   if(t.closest('#title'))return;
   if(ds.speed!=null){if(s&&!s.over)setSpeed(+ds.speed);return}
   if(t.id==='setBtn'){if(s&&!s.over)showSettings();else showTitle('menu');return}
-  if(ds.setgo){const g=ds.setgo;closeModal();if(g==='menu')return showTitle('menu');if(g==='lbl'){toggleLabels();return showSettings(true)}if(g==='cam'){reset3DView();setSpeed(SET_PREV);return}if(g==='shadow')return enterShadow();setSpeed(SET_PREV);return}
+  if(ds.setgo){const g=ds.setgo;closeModal();if(g==='menu')return showTitle('menu');if(g==='sound'){OPT.sound=OPT.sound===false;saveOpt();if(OPT.sound)playSound('confirm');return showSettings(true)}if(g==='lbl'){toggleLabels();return showSettings(true)}if(g==='cam'){reset3DView();setSpeed(SET_PREV);return}if(g==='shadow')return enterShadow();setSpeed(SET_PREV);return}
   if(t.id==='v3reset')return reset3DView();
   if(t.id==='lblBtn')return toggleLabels();
   if(t.id==='extBtn')return setExterior(!W3.ext);
