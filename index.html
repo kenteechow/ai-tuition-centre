@@ -2085,7 +2085,9 @@ function shadowDay(){
       s.t++;s.day=0;s.wkAcc={E:0,newS:0,lost:0,collected:0,lostEnq:0,cost:0,full:0,off:{}};plan();admitWait()}
   }finally{s=keep}
 }
-function migrate(o){return o}
+function yearEndDue(o){return !!o&&!o.over&&o.t>0&&o.t>=48*(o.year||1)}
+function recoverableYearEnd(o){return !!o&&o.over&&o.cash>=-80000&&o.t>0&&o.t>=48*(o.year||1)}
+function migrate(o){if(recoverableYearEnd(o))o.over=false;return o}
 const month=()=>Math.min(11,Math.floor((s.t%48)/4));
 const week=()=>s.t%4+1;
 const lv=id=>{let l=s.ai[id].lv;if(modAdd('aiDown')>0)l=Math.max(0,l-1);return l};
@@ -2272,7 +2274,7 @@ function endOfDay(){
   fxDayDone();
   save();render();
   if(s.cash<-80000){s.over=true;setSpeed(0);save();showEnd(true);return}
-  if(s.t>=48*s.year){if(s.mode==='career'){setSpeed(0);save();showEnd(false,true);return}s.over=true;setSpeed(0);save();showEnd(false);return}
+  if(yearEndDue(s)){setSpeed(0);save();showEnd(false,true);return}
   startDay();
 }
 const RAINP=[.35,.2,.1,.07,.07,.1,.18,.3,.45,.55,.5,.5]; // 九月至八月：夏天多雨、冬天少
@@ -4268,6 +4270,7 @@ function movePremise(id){if(!premOpen()||s.reno)return;
 function finishMove(id){const p=PMAP[id],cur=PMAP[s.prem];const sameArea=p.env===cur.env,keep=sameArea?.93:.65;
   let lostN=0;for(const id2 in s.courses){const c=s.courses[id2];for(const k in c.g){const g=c.g[k],n=Math.round(g.E*(1-keep));g.E-=n;lostN+=n;g.wait=Math.round(g.wait*keep)}syncE(c)}
   s.areaPrev=s.area;applyPremise(s,p);s.closed=true;s.closedUntil=s.t+1;s.flags.moved=s.t;s.reg={ok:false,until:s.t+4};
+  s.flags.waiverOK=false;s.flags.waiverAt=null;s.flags.waiverLate=false;delete s.flags.regDue;delete s.done.landLease;delete s.cool.landLease;
   if(s.shadow){const sh=s.shadow;sh.cash-=(s.reno0cost||0);applyPremise(sh,p)}
   calcS();plan();if(W3.ok)setEnv(s.env);
   log(`搬去「${p.name}」（${PTIER[p.tier].n}，${p.rooms} 間課室 × ${p.seats} 座）。停課一星期；${lostN} 個報讀因為${sameArea?'時間表轉咗':'搬得太遠'}冇跟過嚟。`,'ai');
@@ -4290,7 +4293,7 @@ function premPanel(){
   const util=enrolTotal()/Math.max(1,estCap(s.rooms,s.seats));
   return head('舖','舖位',`而家：${cur.name} · ${cur.area} 呎`,true)+`
    <div class="capbox"><div><span>而家報讀</span><b>${enrolTotal()}</b><small>候補 ${waitTotal()} 人</small></div><div><span>實際可收</span><b>${estCap(s.rooms,s.seats)}</b><small>只計熱門時段</small></div><div><span>用咗</span><b style="color:${util>.85?'var(--red)':util>.6?'var(--warn)':'var(--ok)'}">${Math.round(util*100)}%</b><small>${util>.85?'差唔多爆，可以考慮搬大啲':'仲有位'}</small></div></div>
-   <p class="eff">細舖租金平但收得少人。學生夠多、候補排長龍，先值得搬去大啲嘅舖。搬舖要裝修、交按金同停課一星期；搬去第二區，部分學生唔會跟過去。</p>
+   <p class="eff">細舖租金平但收得少人。搬舖會保留剩餘現金、小金庫、導師、行政、AI 部署同教學設備；學生同候補會按地區流失，課堂可能要重新排。新舖要重新註冊；工廈豁免書唔會跟住搬，亦要付裝修、按金同搬遷費。</p>
    ${card(cur,true)}${PREMISES.filter(p=>p.id!==cur.id).sort((a,b)=>a.rooms-b.rooms||a.rent-b.rent).map(p=>card(p,false)).join('')}`;
 }
 
@@ -5538,7 +5541,7 @@ try{Object.assign(OPT,JSON.parse(localStorage.getItem('aibx-opt')||'{}'))}catch(
 if(![1,3,10].includes(OPT.speed))OPT.speed=1;
 function saveOpt(){try{localStorage.setItem('aibx-opt',JSON.stringify(OPT))}catch(e){}}
 let titleOn=false,titleSel=null,prevGame=null;
-function loadSaved(){let v=null;try{v=JSON.parse(localStorage.getItem('aibx-save4')||'null')}catch(e){}return prevGame&&!prevGame.over?prevGame:(v&&!v.over?v:null)}
+function loadSaved(){let v=null;try{v=JSON.parse(localStorage.getItem('aibx-save4')||'null')}catch(e){}return prevGame&&(!prevGame.over||recoverableYearEnd(prevGame))?prevGame:(v&&(!v.over||recoverableYearEnd(v))?v:null)}
 function showStart(){showTitle('menu')}
 function showTitle(view){
   if(s&&!titleOn&&s.t+s.day>0&&!s.over)prevGame=s;
@@ -5622,7 +5625,7 @@ document.addEventListener('click',ev=>{
   if(t.id==='tStart')return startGame(titleSel);
   if(t.id==='tQuickAI')return startGame(SCENARIOS.find(x=>x.id==='ai'));
   if(t.id==='tDemo')return startDemo();
-  if(t.id==='tContinue'){const sv=loadSaved();if(!sv)return;s=migrate(sv);prevGame=null;if(W3.ok)setEnv(s.env);hideTitle();render();startDay();setSpeed(0);return}
+  if(t.id==='tContinue'){const sv=loadSaved();if(!sv)return;s=migrate(sv);prevGame=null;if(W3.ok)setEnv(s.env);hideTitle();render();setSpeed(0);if(yearEndDue(s))showEnd(false,true);else startDay();return}
   if(ds.optmusic){setMusic(ds.optmusic==='1');renderTitle('opt');return}
   if(ds.optsound){OPT.sound=ds.optsound==='1';saveOpt();if(OPT.sound)playSound('confirm');renderTitle('opt');return}
   if(ds.optspeed){OPT.speed=+ds.optspeed;saveOpt();renderTitle('opt');return}
@@ -5647,13 +5650,13 @@ function showEnd(bankrupt,yearEnd){
   openModal(`<div class="ye"><div class="grade">${g}</div><div><div class="pill info">${bankrupt?'結業':yearEnd?`第 ${s.year} 學年結算`:'2026/27 學年結算'}</div><h2 style="margin-top:6px">${s.scenName}</h2><p>${comment}</p></div></div>
    ${sh?`<div class="bigcmp ${d>=0?'pos':'neg'}"><span>同傳統做法比</span><b>${d>=0?'多賺 ':'少賺 '}${fmt(Math.abs(d))}</b>${s.flags.cross!=null?`<small>喺 ${wkLabel(s.flags.cross)} 追過傳統做法（回本）</small>`:''}</div>`:''}
    <div class="ystats">
-    <div>本錢 → 年尾現金<b style="color:${profit<0?'var(--red)':'var(--ok)'}">${fmtK(s.capital)} → ${fmtK(s.cash)}</b></div>
-    <div>校長小金庫<b>${fmtK(s.vault??0)}</b><small>今年分紅 ${fmtK((s.tot&&s.tot.bonus)||0)}</small></div>
+    <div>開局本錢 → 現金<b style="color:${profit<0?'var(--red)':'var(--ok)'}">${fmtK(s.capital)} → ${fmtK(s.cash)}</b></div>
+    <div>校長小金庫<b>${fmtK(s.vault??0)}</b><small>累計分紅 ${fmtK((s.tot&&s.tot.bonus)||0)}</small></div>
     <div>學生<b>${s.S0} → ${s.S}</b></div>
     <div>口碑<b>${Math.round(s.rep0)} → ${Math.round(s.rep)}</b></div>
     <div>每人服務學生<b>${(s.S/staffN).toFixed(1)}</b></div>
-    <div>全年慳到工時<b>${s.tot.hours.toFixed(0)}h</b></div>
-    <div>全年新生 / 退出<b>${s.tot.newS} / ${s.tot.lost}</b></div>
+    <div>累計慳到工時<b>${s.tot.hours.toFixed(0)}h</b></div>
+    <div>累計新生 / 退出<b>${s.tot.newS} / ${s.tot.lost}</b></div>
    </div>
    ${sh?`<h3>同一個開局，兩種做法</h3><div style="overflow-x:auto">${cmpTable(s,sh)}</div>`:''}
    ${false?`<table class="cmp"><thead><tr><th></th><th>傳統做法<br><small>唔用 AI、做唔切就請人</small></th><th>你嘅補習社</th></tr></thead><tbody>
@@ -5666,7 +5669,7 @@ function showEnd(bankrupt,yearEnd){
    <div class="mfoot">${yearEnd?`<button class="btn" id="againBtn">返回開始畫面</button><button class="btn pri" id="nextYear">繼續第 ${s.year+1} 學年</button>`:`<button class="btn" data-close>留喺呢度睇</button><button class="btn pri" id="againBtn">返回開始畫面</button>`}</div>`,true);
   const dc=$('modal').querySelector('[data-close]');if(dc)dc.onclick=closeModal;
   const ny=$('nextYear');if(ny)ny.onclick=()=>{ny.remove();s.year++;promote();s.courses.sum.on=false;log(`第 ${s.year} 學年開始：學生升班，中六同小六畢業離開`,'ai');closeModal();save();render();startDay();setSpeed(lastSpeed||1)};
-  $('againBtn').onclick=()=>{try{localStorage.removeItem('aibx-save4')}catch(e){};prevGame=null;showTitle('menu')};
+  $('againBtn').onclick=()=>{if(!yearEnd){try{localStorage.removeItem('aibx-save4')}catch(e){};prevGame=null}showTitle('menu')};
 }
 
 /* ============ v30：AI 嘅一日、成果報告、示範模式 ============ */
@@ -5867,7 +5870,7 @@ function start(data){
   init3D();
   requestAnimationFrame(clockLoop);
   $('lblBtn').classList.toggle('on',W3.showLabels);
-  if(data&&data.s){s=migrate(data.s);if(W3.ok)setEnv(s.env);render();setSpeed(data.speed||0);if(s.over)showEnd(s.cash<-80000);return}
+  if(data&&data.s){s=migrate(data.s);if(W3.ok)setEnv(s.env);render();setSpeed(data.speed||0);if(s.over)showEnd(s.cash<-80000);else if(yearEndDue(s))showEnd(false,true);return}
   newGame(SCENARIOS[0]);render();setSpeed(0);showStart();
 }
 window.claude?.hot?.snapshot?.(()=>({s,speed}));
