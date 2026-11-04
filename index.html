@@ -2641,7 +2641,7 @@ function stuAtSeat(id){const [r,j]=id.slice(3).split('-').map(Number),now=nowInR
 function zoneClick(id){
   if(id.startsWith('stu')){const x=stuAtSeat(id);if(x&&W3.ok){const p=seatPos(x.r,x.j);W3.floats.filter(f=>f.say).forEach(f=>{f.el.remove();f.dead=true});W3.floats=W3.floats.filter(f=>!f.dead);
     const el=document.createElement('div');el.className='f3d say '+(x.R.r>=3.5?'ok':x.R.r<=2.5?'bad':'');el.innerHTML=`<b>${x.st.nm}（${LV_TXT[x.st.lv]||''}）${stars(x.R.r)}</b>${x.th}`;$('v3labels').appendChild(el);
-    W3.floats.push({el,pos:[p.x,2.1,p.z],t0:performance.now(),dur:6000,rise:.25,say:true})}return}
+    W3.floats.push({el,pos:[p.x,2.1+(ROOMS[x.r].fl===2?FLOOR2_Y:0),p.z],t0:performance.now(),dur:6000,rise:.25,say:true})}return}
   if(DMAP[id])return openPanel('dept',id);
   if(id==='recep')return openPanel('dept','enq');
   if(id==='server')return openPanel('ai');
@@ -4622,6 +4622,17 @@ function classColumn(sc,f2){glassRun('z',4.85,-8,8,ROOMS.slice(0,4).map(r=>[r.gz
   ROOMS.slice(0,4).forEach((r,ri)=>{
     [7.6,9.9].forEach(tx=>[-.98,.98].forEach(dz=>{const tz=r.cz+dz;const tb=vxStudentTable();tb.position.set(tx,0,tz);sc.add(tb);
       [-.6,0,.6].forEach((s,i)=>{const st=vxStool([0xffc2c2,0xc2e0ff,0xd6f5c2][i]);st.position.set(tx+.68,0,tz+s);sc.add(st)})}))})}
+// 樓上剖面下方嘅地下外牆：只喺睇樓上室內時顯示。
+const FLOOR2_Y=3.2;
+function buildFloorBase(){const g=new THREE.Group(),wall=mat(0xe4dede),frame=mat(0xb3aab6),glass=mat(0x9bc8e1),dark=mat(0x677585);
+  g.add(box(25,3.2,17.4,wall,0,1,0));
+  g.add(box(25.1,.18,17.5,frame,0,-.5,0));
+  g.add(box(25.1,.18,17.5,frame,0,2.48,0));
+  for(let x=-10.5;x<=10.5;x+=3.5){g.add(box(2.55,1.55,.08,glass,x,1.1,8.74,false));g.add(box(.08,1.62,.1,frame,x,1.1,8.8,false));g.add(box(2.6,.08,.1,frame,x,.32,8.8,false))}
+  for(let z=-6.6;z<=6.6;z+=3.3){g.add(box(.08,1.55,2.35,glass,12.54,1.1,z,false));g.add(box(.1,1.62,.08,frame,12.6,1.1,z,false))}
+  g.add(box(2.1,2.25,.12,dark,-3.2,.65,8.82,false));g.add(box(.1,2.2,.14,frame,-3.2,.65,8.9,false));
+  const sign=textTex((x,w,h)=>{x.fillStyle='#394b60';x.fillRect(0,0,w,h);x.fillStyle='#ffffff';x.font='700 50px "Noto Sans TC",sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText('地下 G/F',w/2,h/2)},384,96);
+  const label=new THREE.Mesh(new THREE.PlaneGeometry(3.1,.75),new THREE.MeshBasicMaterial({map:sign.t}));label.position.set(-3.2,2.02,8.92);g.add(label);g.visible=false;return g}
 // 樓上：E–H 四間課室＋升降機大堂＋自修室
 function buildF2(sc){
   const slab=box(25,.6,17.4,mat(PAL.slab),0,-.3,0);slab.castShadow=false;sc.add(slab);
@@ -4798,7 +4809,7 @@ function init3D(){
   const hemi=new THREE.HemisphereLight(0xffffff,0xd9cdea,.78);scene.add(hemi);
   const sun=new THREE.DirectionalLight(0xffffff,.62);sun.position.set(9,20,7);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
   Object.assign(sun.shadow.camera,{left:-32,right:32,top:28,bottom:-28,near:1,far:90});sun.shadow.camera.updateProjectionMatrix();sun.castShadow=OPT.shadows;renderer.shadowMap.enabled=OPT.shadows;sun.shadow.bias=-.0006;sun.shadow.radius=3;scene.add(sun);
-  initDynLights(scene);{const f1=new THREE.Group(),f2=new THREE.Group();scene.add(f1);scene.add(f2);W3.f1=f1;W3.f2=f2;W3.floor=1;buildStatic(f1,scene);buildF2(f2);f2.visible=false}buildZones();W3.ok=true;W3.scene=scene;setEnv('estate');
+  initDynLights(scene);{const f1=new THREE.Group(),f2=new THREE.Group();scene.add(f1);scene.add(f2);W3.f1=f1;W3.f2=f2;W3.floor=1;buildStatic(f1,scene);buildF2(f2);f2.position.y=FLOOR2_Y;W3.floorBase=buildFloorBase();scene.add(W3.floorBase);f2.visible=false}buildZones();W3.ok=true;W3.scene=scene;setEnv('estate');
   const hl=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({color:0xff7a6b,transparent:true,opacity:.22,depthWrite:false}));
   hl.rotation.x=-Math.PI/2;hl.position.y=.07;hl.visible=false;scene.add(hl);
   const dyn=new THREE.Group();scene.add(dyn);
@@ -4820,16 +4831,16 @@ function init3D(){
   // 滑鼠
   const ray=new THREE.Raycaster(),v2=new THREE.Vector2(),plane=new THREE.Plane(new THREE.Vector3(0,1,0),-.6),hit=new THREE.Vector3();let down=null,tipTimer=null;
   const plane2=new THREE.Plane(new THREE.Vector3(0,1,0),-.95),hit2=new THREE.Vector3();
-  const seatAt=ry=>{if(!s||s.closed)return null;if(!ry.ray.intersectPlane(plane2,hit2))return null;const now=nowInRooms();let best=null,bd=.34;
-    now.forEach((k,r)=>{if(!k||r>=s.rooms)return;const n=Math.min(k.n||0,s.seats);for(let j=0;j<n;j++){const p=seatPos(r,j),d=Math.hypot(hit2.x-p.x,hit2.z-p.z);if(d<bd){bd=d;best={id:'stu'+r+'-'+j,x1:p.x-.35,x2:p.x+.35,z1:p.z-.35,z2:p.z+.35,pri:-1}}}});return best};
+  const seatAt=ry=>{if(!s||s.closed)return null;plane2.constant=-.95-((W3.floor||1)===2?FLOOR2_Y:0);if(!ry.ray.intersectPlane(plane2,hit2))return null;const now=nowInRooms();let best=null,bd=.34;
+    now.forEach((k,r)=>{if(!k||r>=s.rooms||ROOMS[r].fl!==(W3.floor||1))return;const n=Math.min(k.n||0,s.seats);for(let j=0;j<n;j++){const p=seatPos(r,j),d=Math.hypot(hit2.x-p.x,hit2.z-p.z);if(d<bd){bd=d;best={id:'stu'+r+'-'+j,x1:p.x-.35,x2:p.x+.35,z1:p.z-.35,z2:p.z+.35,pri:-1}}}});return best};
   const zoneAt=ev=>{const r=renderer.domElement.getBoundingClientRect();v2.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1);ray.setFromCamera(v2,cam);
     const st=seatAt(ray);if(st)return st;
-    if(!ray.ray.intersectPlane(plane,hit))return null;let best=null;for(const z of ZONES)if((z.fl||1)===(W3.floor||1)&&hit.x>=z.x1&&hit.x<=z.x2&&hit.z>=z.z1&&hit.z<=z.z2&&(!best||z.pri<best.pri))best=z;return best};
+    plane.constant=-.6-((W3.floor||1)===2?FLOOR2_Y:0);if(!ray.ray.intersectPlane(plane,hit))return null;let best=null;for(const z of ZONES)if((z.fl||1)===(W3.floor||1)&&hit.x>=z.x1&&hit.x<=z.x2&&hit.z>=z.z1&&hit.z<=z.z2&&(!best||z.pri<best.pri))best=z;return best};
   const showTip=(z,x,y)=>{const tip=$('tip');if(!z||!s){tip.hidden=true;hl.visible=false;W3.hover=null;return}
     if(W3.hover!==z.id){W3.hover=z.id;tip.innerHTML=zoneInfo(z.id)}
     tip.hidden=false;const tw=tip.offsetWidth,th=tip.offsetHeight;
     let tx=x+16,ty=y+16;if(tx+tw>innerWidth-8)tx=x-tw-16;if(ty+th>innerHeight-8)ty=innerHeight-th-8;tip.style.transform=`translate(${Math.max(8,tx)}px,${Math.max(8,ty)}px)`;
-    hl.visible=true;hl.position.set((z.x1+z.x2)/2,.07,(z.z1+z.z2)/2);hl.scale.set(z.x2-z.x1,z.z2-z.z1,1)};
+    hl.visible=true;hl.position.set((z.x1+z.x2)/2,.07+((W3.floor||1)===2?FLOOR2_Y:0),(z.z1+z.z2)/2);hl.scale.set(z.x2-z.x1,z.z2-z.z1,1)};
   W3.refreshTip=()=>{if(W3.hover&&!$('tip').hidden){$('tip').innerHTML=zoneInfo(W3.hover)}};
   const cv=renderer.domElement;
   cv.style.cursor='grab';
@@ -4904,7 +4915,7 @@ function update3D(P){
   if(W3.sofa)W3.sofa.visible=!!(s.fac&&s.fac.sofa);
   // 學生：每間課室坐返嗰堂嘅實際人數
   const sw=W3.seatWait||0;
-  now.forEach((k,r)=>{if(!k||r>=s.rooms)return;const n=Math.min(k.n||0,s.seats);
+  now.forEach((k,r)=>{if(!k||r>=s.rooms||ROOMS[r].fl!==(W3.floor||1))return;const n=Math.min(k.n||0,s.seats);
     for(let j=0;j<n;j++){const sp=seatPos(r,j);
       add('st'+r+'-'+j,'s'+k.ci+'-'+j,()=>stuModel(k,j),sp.x,sp.z,{y:.22,ry:-Math.PI/2,anim:'sit',wait:sw+j*.05,fl:ROOMS[r].fl})}
     const C=s.courses[k.c];if(C&&C.E>C.cap)for(let j=0;j<2;j++)add('ov'+r+'-'+j,'o'+k.ci,()=>person(PAL.stu[j],{size:.78}),11.35,ROOMS[r].cz-1+j*.8,{ry:-Math.PI/2,anim:'panic',wait:sw+.6,fl:ROOMS[r].fl})});
@@ -4943,7 +4954,7 @@ function update3D(P){
   if(W3.refreshTip)W3.refreshTip();
 }
 function floorLabels(){const f=W3.floor||1,Lb=W3.labels;for(const k in Lb){const m=/^room(\d)$/.exec(k);if(m){const i=+m[1];if(ROOMS[i].fl!==f)Lb[k].el.hidden=true}else if(f===2)Lb[k].el.hidden=true;else if(k.startsWith('st-')||k==='boss')Lb[k].el.hidden=false}}
-function setFloor(n){if(!W3.ok)return;n=n===2&&premMax()>4?2:1;W3.floor=n;W3.f1.visible=n===1;W3.f2.visible=n===2;
+function setFloor(n){if(!W3.ok)return;n=n===2&&premMax()>4?2:1;W3.floor=n;W3.f1.visible=n===1;W3.f2.visible=n===2;if(W3.floorBase)W3.floorBase.visible=n===2&&!W3.ext;
   for(const [k,e] of W3.ents)e.obj.visible=(e.obj.userData.fl||1)===n;for(const o of W3.dyn.children)if(o.userData.walker)o.visible=n===1;
   const b=$('floorBtn');if(b)b.innerHTML=`<b>${n===1?'地下 G/F':'樓上 2/F'}</b><small>撳切換去${n===1?'樓上 E–H':'地下'}</small>`;
   if(s)update3D(W3.lastP||computeLoads(expectedE()));if(W3.hover){$('tip').hidden=true;W3.hover=null}}
@@ -5009,7 +5020,7 @@ function loop3D(now){
     }
     const sc=o.scale.x+(u.ts-o.scale.x)*kS;o.scale.setScalar(Math.max(.001,sc));
     if(u.dying&&sc<.03){W3.dyn.remove(o);continue}
-    let y=u.ty||0;
+    let y=(u.ty||0)+(u.fl===2?FLOOR2_Y:0);
     if(!RM3){const ph=u.ph||0;
       if(u.far||u.anim==='walk')y+=Math.abs(Math.sin(t*10+ph))*.08;
       else if(u.anim==='bob')y+=Math.abs(Math.sin(t*2.2+ph))*.05;
@@ -5059,7 +5070,7 @@ function loop3D(now){
   camUpdate(dt);
   W3.renderer.render(W3.scene,W3.cam);
   const proj=(p)=>{_v3.set(p[0],p[1],p[2]).project(W3.cam);return [((_v3.x+1)/2*W3.w),((1-_v3.y)/2*W3.h)]};
-  if(W3.showLabels)for(const key in W3.labels){const l=W3.labels[key];if(l.el.hidden)continue;const [x,y]=proj(l.pos);l.el.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-100%)`}
+  if(W3.showLabels)for(const key in W3.labels){const l=W3.labels[key];if(l.el.hidden)continue;const [x,y]=proj([l.pos[0],l.pos[1]+(/^room[4-7]$/.test(key)?FLOOR2_Y:0),l.pos[2]]);l.el.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-100%)`}
   W3.floats=W3.floats.filter(f=>{const a=(now-f.t0)/(f.dur||1800);if(a>=1){f.el.remove();return false}const [x,y]=proj([f.pos[0],f.pos[1]+a*(f.rise??1.2),f.pos[2]]);f.el.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-100%)`;f.el.style.opacity=a<.15?a/.15:1-(a-.15)/.85;return true});
 }
 
@@ -5324,7 +5335,7 @@ function bldgShell(g,id){const S=SHELL[id]||SHELL.estate,vs=.5,W=51,D=36,F0=6,FH
   const bs=new THREE.Mesh(new THREE.PlaneGeometry(9,2),big);bs.position.set(0,(H+5)*vs-.6,z0+(D-2.5)*vs);grp.add(bs);
   const fs=new THREE.Mesh(new THREE.PlaneGeometry(5,.9),big);fs.position.set(DOOR.x,(F0-1)*vs-.6+.25,z0+(D+2)*vs+.04);grp.add(fs);W3.signMeshes.push(fs);
   g.add(grp);return grp}
-function setExterior(on){W3.ext=on;if(W3.shell)W3.shell.visible=on;const b=$('extBtn');if(b){b.classList.toggle('on',on);b.innerHTML=on?'<b>睇返室內</b><small>剖面圖</small>':'<b>建築外觀</b><small>連屋頂、外牆</small>'}
+function setExterior(on){W3.ext=on;if(W3.shell)W3.shell.visible=on;if(W3.floorBase)W3.floorBase.visible=!on&&W3.floor===2;const b=$('extBtn');if(b){b.classList.toggle('on',on);b.innerHTML=on?'<b>睇返室內</b><small>剖面圖</small>':'<b>建築外觀</b><small>連屋頂、外牆</small>'}
   $('v3labels').hidden=on||!W3.showLabels;if(on){Object.assign(CAM.g,{pitch:.42,dist:Math.max(CAM.g.dist,52)})}else{CAM.g.pitch=Math.max(CAM.g.pitch,.8)}}
 
 /* ============ 香港街道、紅綠燈、交通（v19） ============ */
