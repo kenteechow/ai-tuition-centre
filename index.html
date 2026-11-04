@@ -1039,6 +1039,13 @@ body.shadowing .kpi .k::before{content:'隔籬 · ';color:var(--warn)}
 .ttc.conf{outline:3px solid #ed5b5b;outline-offset:-1px;animation:none}
 .lg.conf{outline:2px solid #ed5b5b;outline-offset:-2px}
 
+/* 參觀隔籬嘅示範卡放入比較面板，唔遮住數字同返回掣。 */
+.shview.with-demo{top:calc(84px + env(safe-area-inset-top,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));max-height:none}
+.shview.with-demo .shh{flex:none}
+.shview.with-demo .shb{min-height:0;flex:1 1 auto}
+.shview.with-demo .democard{position:static;left:auto;right:auto;top:auto;bottom:auto;width:auto;flex:none;margin:8px 10px;padding:8px 10px;max-height:35vh;overflow:auto}
+@media (max-width:860px){.shview.with-demo .shh small{display:none}}
+
 .toast{bottom:auto;top:calc(100px + env(safe-area-inset-top,0px))}
 @media (max-width:860px){.toast{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px))}}
 .pausebadge{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);font-size:16px;padding:6px 14px}
@@ -5779,8 +5786,9 @@ function startDemo(){startGame(SCENARIOS.find(x=>x.id==='mk'));let g=0;while(bus
 function demoRun(days,sp){DEMO.stop=s.t*7+s.day+days;DEMO.wait=true;setSpeed(sp);demoCard()}
 function demoTick(){if(!DEMO||DEMO.stop==null)return;if(s.t*7+s.day>=DEMO.stop){DEMO.stop=null;setSpeed(0);DEMO.wait=false;demoCard()}}
 function demoNext(){if(!DEMO)return;if(DEMO.stop!=null)return;DEMO.wait=false;if(W3.viewShadow)exitShadow();if(!busy&&!$('mw').hidden)closeModal();DEMO.i++;if(DEMO.i>=DEMO_STEPS.length)return demoEnd();setSpeed(0);const st=DEMO_STEPS[DEMO.i];demoCard();try{st.go()}catch(e){console.error(e)}demoCard()}
-function demoEnd(){DEMO=null;const c=$('demoCard');if(c)c.remove()}
+function demoEnd(){DEMO=null;const c=$('demoCard');if(c)c.remove();const sh=$('shview');if(sh)sh.classList.remove('with-demo')}
 function demoCard(){if(!DEMO)return;let c=$('demoCard');if(!c){c=document.createElement('div');c.id='demoCard';c.className='democard glass';document.querySelector('.app').appendChild(c)}
+  const sh=$('shview');if(W3.viewShadow&&sh){sh.classList.add('with-demo');sh.insertBefore(c,sh.querySelector('.shb'))}else if(c.parentElement!==document.querySelector('.app'))document.querySelector('.app').appendChild(c);
   const st=DEMO_STEPS[DEMO.i]||DEMO_STEPS[0],last=DEMO.i>=DEMO_STEPS.length-1,running=DEMO.stop!=null;
   c.innerHTML=`<div class="dch"><span class="pill info">示範 ${DEMO.i+1} / ${DEMO_STEPS.length}</span><button class="lnk" data-demoend>結束示範</button></div><b>${st.t}</b><p>${st.d}</p>
    <div class="dcf">${running?'<span class="pill hl">快進緊……</span>':DEMO.wait?'<span class="pill">完成上面嘅步驟會自動繼續</span>':''}<button class="btn ${DEMO.wait&&!running?'':'pri'}" data-demonext ${running?'disabled':''}>${last?'完成':DEMO.wait&&!running?'跳過 ›':'下一步 ›'}</button></div>`}
