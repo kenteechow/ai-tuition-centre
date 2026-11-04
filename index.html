@@ -1563,14 +1563,15 @@ function plan(){
     if(t){t.left-=C.hrs;t.used+=C.hrs}else{own.left-=C.hrs;own.used+=C.hrs}
     addClass(m.c,m.g,m.tid||0,{manual:m.id,cold:!isPref(m.c,m.d,m.sl)||!cellUsable(m.d,m.sl)})}
   // 2) 系統按需求自動排：只用熱門時段，盡量避開同級撞堂
+  const cutBlocked=(id,k,d,sl,r)=>{const x=s.__cutBlock;return !!x&&x.c===id&&x.g===k&&x.d===d&&x.sl===sl&&x.r===r};
   const tryPlace=(id,k,tk)=>{const C=CMAP[id];
-    if(C.daily){if(offTk(tk,0,'hw'))return false;for(let r=0;r<s.rooms;r++){const ok=[0,1,2,3,4].every(d=>!busyR.has(d+'-0-'+r)&&!busyR.has(d+'-1-'+r)&&!busyT.has(tk+'@'+d+'-0')&&!busyT.has(tk+'@'+d+'-1'));
+    if(C.daily){if(offTk(tk,0,'hw'))return false;for(let r=0;r<s.rooms;r++){if(cutBlocked(id,k,0,'hw',r))continue;const ok=[0,1,2,3,4].every(d=>!busyR.has(d+'-0-'+r)&&!busyR.has(d+'-1-'+r)&&!busyT.has(tk+'@'+d+'-0')&&!busyT.has(tk+'@'+d+'-1'));
         if(ok){[0,1,2,3,4].forEach(d=>{[0,1].forEach(sl=>{busyR.add(d+'-'+sl+'-'+r);busyT.add(tk+'@'+d+'-'+sl)});s.tt.push({d,sl:'hw',r,ci:s.classes.length})});return true}}return false}
     if(C.summer){const got=[];for(const d of [0,2,4]){let done=false;for(let sl=0;sl<3&&!done;sl++)for(let r=0;r<s.rooms&&!done;r++){const kk='s'+d+'-'+sl+'-'+r;if(!busyR.has(kk)&&!busyT.has(tk+'@s'+d+'-'+sl)&&!got.some(x=>x.k===kk)){got.push({d,sl,r,k:kk});done=true}}if(!done)return false}
       got.forEach(g=>{busyR.add(g.k);busyT.add(tk+'@s'+g.d+'-'+g.sl);s.tt.push({d:g.d,sl:'s'+g.sl,r:g.r,ci:s.classes.length})});return true}
     const pref=PREF[C.grp==='dse'?'dse':C.grp==='int'?'int':id==='pri'?'pri':'jun'];
     for(const pass of [0,1])for(const [d,sl] of pref){if(!cellUsable(d,sl)||busyT.has(tk+'@'+d+'-'+sl)||offTk(tk,d,sl))continue;if(pass===0&&lvClash(d,sl,id,k))continue;
-      for(let r=0;r<s.rooms;r++){if(busyR.has(d+'-'+sl+'-'+r))continue;mark(d,sl,r,tk,id,k);s.tt.push({d,sl,r,ci:s.classes.length});return true}}
+      for(let r=0;r<s.rooms;r++){if(cutBlocked(id,k,d,sl,r)||busyR.has(d+'-'+sl+'-'+r))continue;mark(d,sl,r,tk,id,k);s.tt.push({d,sl,r,ci:s.classes.length});return true}}
     return false};
   const want=(id,k)=>{const c=s.courses[id],g=c.g[k];if(!c.on||!courseActive(id))return 0;const n=g.E+g.wait;if(g.E===0&&n<minOpen(id))return 0;return Math.ceil(n/cSize(id))};
   const blocked=new Set();
@@ -1582,7 +1583,7 @@ function plan(){
   if(!autoOff)for(const p of (s.autoSig||[])){if(p.d==null)continue;const [id,k]=p.cg.split('.'),C=CMAP[id],c=s.courses[id];if(!C||C.daily||C.summer||!c||!c.g[k])continue;
     const g=c.g[k],key=id+'.'+k,lim=s.gmax&&s.gmax[key]!=null?s.gmax[key]:99;if(Math.min(tgt(id,k),lim)-g.cls<=0)continue;
     const t=p.tid?s.tutors.find(x=>x.id===p.tid):null,tk=p.tid?'t'+p.tid:'o';if(p.tid?(!t||!t.can.includes(id)||t.left<C.hrs-1e-6):(!s.ownerCan.includes(id)||own.left<C.hrs))continue;
-    if(p.r>=s.rooms||!daySl(p.d)[p.sl]||!cellUsable(p.d,p.sl)||offTk(tk,p.d,p.sl)||busyR.has(p.d+'-'+p.sl+'-'+p.r)||busyT.has(tk+'@'+p.d+'-'+p.sl)||lvClash(p.d,p.sl,id,k))continue;
+    if(cutBlocked(id,k,p.d,p.sl,p.r)||p.r>=s.rooms||!daySl(p.d)[p.sl]||!cellUsable(p.d,p.sl)||offTk(tk,p.d,p.sl)||busyR.has(p.d+'-'+p.sl+'-'+p.r)||busyT.has(tk+'@'+p.d+'-'+p.sl)||lvClash(p.d,p.sl,id,k))continue;
     mark(p.d,p.sl,p.r,tk,id,k);s.tt.push({d:p.d,sl:p.sl,r:p.r,ci:s.classes.length});if(t){t.left-=C.hrs;t.used+=C.hrs}else{own.left-=C.hrs;own.used+=C.hrs}addClass(id,k,p.tid||0)}
   for(let guard=0;guard<160;guard++){
     let best=null,bv=0;
@@ -1618,11 +1619,11 @@ function planDiff(){if(!s||s.closed)return;const cur=autoSigList(),prev=s.autoSi
 function setAutoPlan(on){if(on===(s.autoPlan!==false))return;
   if(!on){let n=0;s.manual=s.manual||[];s.classes.forEach((k,ci)=>{if(k.manual||CMAP[k.c].summer)return;const e=s.tt.find(x=>x.ci===ci);if(!e)return;s.mid=(s.mid||0)+1;s.manual.push({id:s.mid,c:k.c,g:k.g,d:CMAP[k.c].daily?0:e.d,sl:CMAP[k.c].daily?0:e.sl,r:e.r,tid:k.tid||0,fromAuto:1});n++});
     s.autoPlan=false;s.quietPlan=1;plan();s.quietPlan=0;log(`關咗自動排堂：而家 ${n} 班系統排嘅班全部保留，變成你手動管理；之後有新報讀，系統唔會自己開班，要你喺時間表開。`,'ai')}
-  else{const back=(s.manual||[]).filter(m=>m.fromAuto).length;s.manual=(s.manual||[]).filter(m=>!m.fromAuto);s.autoPlan=true;s.quietPlan=1;plan();s.quietPlan=0;admitWait();log(`開返自動排堂：${back?`當初由系統轉過嚟嘅 ${back} 班交返系統管理（你自己開嘅班唔變）；`:''}系統會按報讀同候補人數自動開班、減班，每次改動都會喺最新消息通知你。`,'ai')}
+  else{const back=(s.manual||[]).filter(m=>m.fromAuto).length;s.manual=(s.manual||[]).filter(m=>!m.fromAuto||classOpPending(m.id));s.autoPlan=true;s.quietPlan=1;plan();s.quietPlan=0;admitWait();log(`開返自動排堂：${back?`當初由系統轉過嚟嘅 ${back} 班交返系統管理（你自己開嘅班唔變）；`:''}系統會按報讀同候補人數自動開班、減班，每次改動都會喺最新消息通知你。`,'ai')}
   save();render()}
 // 有位就由候補轉正式報讀（下星期開班）
 function admitWait(){let n=0,pr=0;const dLeft=(5-week())*7-s.day;
-  for(const id in s.courses){const c=s.courses[id];for(const k in c.g){const g=c.g[k],room=Math.max(0,g.cap-g.E),m=Math.min(room,g.wait);if(m>0){g.E+=m;g.wait-=m;n+=m;pr+=m*feeC(id)*Math.max(0,dLeft)/28}}syncE(c)}
+  for(const id in s.courses){const c=s.courses[id];for(const k in c.g){const g=c.g[k],room=groupCutPending(id,k)?0:Math.max(0,g.cap-g.E),m=Math.min(room,g.wait);if(m>0){g.E+=m;g.wait-=m;n+=m;pr+=m*feeC(id)*Math.max(0,dLeft)/28}}syncE(c)}
   s.receivable+=Math.round(pr);calcS();splitClasses();return n}
 // 學生先坐熱門時段嘅班，冷門時段嘅班最後先有人
 function splitClasses(){for(const id in s.courses)for(const k in s.courses[id].g){const g=s.courses[id].g[k],all=s.classes.map((x,i)=>x.c===id&&x.g===k?i:-1).filter(i=>i>=0);let left=g.E;
@@ -1731,9 +1732,7 @@ function addManual(f){
   if(PANEL){PANEL.sel=CMAP[f.c].daily?{type:'cls',d:0,sl:0,r:f.r}:{type:'cls',d:f.d,sl:f.sl,r:f.r};PANEL.form=null}
   save();render();
 }
-function delManual(id){const m=(s.manual||[]).find(x=>x.id===id);if(!m)return;
-  const k=s.classes.find(x=>x.manual===id);if(k&&k.n>0)log(`取消「${className(k)}」，${k.n} 個學生要搵其他班或者候補`,'bad');
-  s.manual=s.manual.filter(x=>x.id!==id);plan();save();render()}
+function delManual(id){const ci=s.classes.findIndex(x=>x.manual===id),e=s.tt.find(x=>x.ci===ci);if(ci>=0&&e){PANEL.sel={type:'cls',d:e.d,sl:e.sl,r:e.r};const k=s.classes[ci];PANEL.cut=`${k.c}.${k.g}@${e.d},${e.sl},${e.r}`;renderPanel();pTop();return}if(classOpPending(id)){toast('呢班已有待處理安排');return}s.manual=(s.manual||[]).filter(x=>x.id!==id);plan();save();render()}
 
 /* ---- 調班、減班、學生名單同評價 ---- */
 function hhmm(h){return Math.floor(h)+':'+String(Math.round(h%1*60)).padStart(2,'0')}
@@ -1741,7 +1740,7 @@ function slTime(d,sl){if(sl==='hw')return '15:30–18:30';if(String(sl).startsWi
 function classWhen(ci){const es=s.tt.filter(x=>x.ci===ci);if(!es.length)return '';const k=s.classes[ci];
   if(es[0].sl==='hw')return '星期一至五 15:30–18:30';if(String(es[0].sl).startsWith('s'))return '星期'+[...new Set(es.map(e=>DAYS[e.d]))].join('、')+' '+slTime(0,es[0].sl);
   return `星期${DAYS[es[0].d]} ${slTime(es[0].d,es[0].sl)}`}
-function moveClass(ci,f){const k=s.classes[ci];if(!k)return;const chk=newClassCheck({c:k.c,g:k.g,d:f.d,sl:f.sl,r:f.r,tid:f.tid,ex:ci});if(!chk.ok){toast('調唔到：'+((chk.res.find(x=>x[0]==='bad')||[])[1]||'有衝突'));return}
+function applyMoveClass(ci,f){const k=s.classes[ci];if(!k)return;const chk=newClassCheck({c:k.c,g:k.g,d:f.d,sl:f.sl,r:f.r,tid:f.tid,ex:ci});if(!chk.ok){toast('調唔到：'+((chk.res.find(x=>x[0]==='bad')||[])[1]||'有衝突'));return}
   const from=classWhen(ci)+' · 課室 '+ROOMS[s.tt.find(x=>x.ci===ci).r].id+' · '+tutorName(k.tid);
   if(k.manual){const m=s.manual.find(x=>x.id===k.manual);Object.assign(m,{d:f.d,sl:f.sl,r:f.r,tid:f.tid||0})}
   else{s.mid=(s.mid||0)+1;s.manual=s.manual||[];s.manual.push({id:s.mid,c:k.c,g:k.g,d:f.d,sl:f.sl,r:f.r,tid:f.tid||0,conv:1})}
@@ -1760,22 +1759,58 @@ function swapCheck(ci,cj){const a=s.classes[ci],b=s.classes[cj],ea=s.tt.find(e=>
   const clashAt=(k,d,sl)=>s.tt.some(e=>e.ci!==ci&&e.ci!==cj&&e.d===d&&e.sl===sl&&lvls(s.classes[e.ci].c,s.classes[e.ci].g).some(l=>lvls(k.c,k.g).includes(l))&&className(s.classes[e.ci])!==className(k));
   const warn=clashAt(a,eb.d,eb.sl)||clashAt(b,ea.d,ea.sl);
   return {ok:true,warn,why:warn?'可以互換，但同級會撞堂':`同「${className(b)}」互換時段同課室`}}
-function swapClasses(ci,cj){const ch=swapCheck(ci,cj);if(!ch.ok){toast('換唔到：'+ch.why);return}
+function applySwapClasses(ci,cj){const ch=swapCheck(ci,cj);if(!ch.ok){toast('換唔到：'+ch.why);return}
   const a=s.classes[ci],b=s.classes[cj],ea=Object.assign({},s.tt.find(e=>e.ci===ci)),eb=Object.assign({},s.tt.find(e=>e.ci===cj));s.manual=s.manual||[];
   const pin=(k,e)=>{if(k.manual){const m=s.manual.find(x=>x.id===k.manual);if(m){Object.assign(m,{d:e.d,sl:e.sl,r:e.r});return}}s.mid=(s.mid||0)+1;s.manual.push({id:s.mid,c:k.c,g:k.g,d:e.d,sl:e.sl,r:e.r,tid:k.tid||0,conv:1})};
   const na=className(a),nb=className(b);pin(a,eb);pin(b,ea);plan();admitWait();
   log(`互換：「${na}」去咗星期${DAYS[eb.d]} ${slLabel(eb.d,eb.sl)} 課室 ${ROOMS[eb.r].id}；「${nb}」去咗星期${DAYS[ea.d]} ${slLabel(ea.d,ea.sl)} 課室 ${ROOMS[ea.r].id}`,'ok');
   if(PANEL)PANEL.sel={type:'cls',d:eb.d,sl:eb.sl,r:eb.r};save();render()}
-function cutPreview(ci){const k=s.classes[ci],g=s.courses[k.c].g[k.g],cap2=g.cap-cSize(k.c),over=Math.max(0,g.E-cap2);
+function cutPreview(ci){const k=s.classes[ci],g=s.courses[k.c].g[k.g],cap2=g.cap-cSize(k.c),over=Math.min(k.n,Math.max(0,g.E-cap2));
   return {n:k.n,over,moved:k.n-over,toW:Math.min(over,Math.max(0,12-g.wait)),left:g.cls-1}}
-function reduceClass(ci){const k=s.classes[ci];if(!k)return;const key=k.c+'.'+k.g,g=s.courses[k.c].g[k.g],pv=cutPreview(ci),when=classWhen(ci);
+function applyReduceClass(ci,immediate){const k=s.classes[ci];if(!k)return;const key=k.c+'.'+k.g,g=s.courses[k.c].g[k.g],pv=cutPreview(ci),when=classWhen(ci);
+  const slot=s.tt.find(e=>e.ci===ci);if(slot)s.__cutBlock={c:k.c,g:k.g,d:CMAP[k.c].daily?0:slot.d,sl:slot.sl,r:slot.r};
   if(k.manual)s.manual=s.manual.filter(x=>x.id!==k.manual);
   s.gmax=s.gmax||{};s.gmax[key]=Math.max(0,g.cls-1);
-  plan();
-  const over=Math.max(0,g.E-g.cap),toW=Math.min(over,Math.max(0,12-g.wait)),lost=over-toW;
-  if(over>0){g.E-=over;g.wait+=toW;syncE(s.courses[k.c]);s.rep=clamp(s.rep-Math.min(3,over*.25),0,100);s.tot.lost+=lost;calcS();splitClasses()}
-  log(`減咗「${className(k)}」（${when}）：${[pv.n-over?(pv.n-over)+' 個學生轉去同組其他班':'',toW?toW+' 個入候補':'',lost?lost+' 個退出':''].filter(Boolean).join('，')||'冇學生受影響'}。呢組之後最多 ${s.gmax[key]} 班，系統唔會自動加返。`,over?'bad':'');
+  try{plan()}finally{delete s.__cutBlock}
+  const over=Math.min(pv.n,Math.max(0,g.E-g.cap)),toW=Math.min(over,Math.max(0,12-g.wait)),lost=over-toW;
+  let refund=0;if(over>0){g.E-=over;g.wait+=toW;syncE(s.courses[k.c]);if(immediate){refund=Math.round(over*feeC(k.c)*Math.max(0,(5-week())*7-s.day)/28);s.cash-=refund;book('refund',refund);s.rep=clamp(s.rep-Math.min(3,over*.25),0,100)}s.tot.lost+=lost;calcS();splitClasses()}
+  log(`減咗「${className(k)}」（${when}）：${[pv.n-over?(pv.n-over)+' 個學生轉去同組其他班':'',toW?toW+' 個入候補':'',lost?lost+' 個退出':''].filter(Boolean).join('，')||'冇學生受影響'}${refund?`；估算退款 ${fmt(refund)}、口碑下降`:''}。呢組之後最多 ${s.gmax[key]} 班，系統唔會自動加返。`,over&&immediate?'bad':'');
   if(PANEL){PANEL.sel=null;PANEL.cut=null}save();render()}
+/* 排程以遊戲日計，避免週中通知不足七日。手動班 id 用作穩定識別。 */
+function opDay(){return s.t*7+s.day}
+function classOpPending(id){return (s.classOps||[]).some(o=>o.ids.includes(id))}
+function groupCutPending(c,g){return (s.classOps||[]).some(o=>o.kind==='cut'&&o.c===c&&o.g===g)}
+function pinClass(ci){const k=s.classes[ci],e=s.tt.find(x=>x.ci===ci);if(!k||!e)return null;
+  if(k.manual)return k.manual;
+  s.mid=(s.mid||0)+1;s.manual=s.manual||[];s.manual.push({id:s.mid,c:k.c,g:k.g,d:CMAP[k.c].daily?0:e.d,sl:CMAP[k.c].daily?0:e.sl,r:e.r,tid:k.tid||0,conv:1});return s.mid}
+function classIndexByManual(id){return s.classes.findIndex(k=>k.manual===id)}
+function releaseOpPin(id,created){if(created)s.manual=(s.manual||[]).filter(m=>m.id!==id)}
+function queueClassOp(kind,ids,created,extra){s.classOps=s.classOps||[];s.classOps.push(Object.assign({kind,ids,created,due:opDay()+7},extra));plan();save();render()}
+function moveClass(ci,f){const k=s.classes[ci];if(!k)return;const chk=newClassCheck({c:k.c,g:k.g,d:f.d,sl:f.sl,r:f.r,tid:f.tid,ex:ci});if(!chk.ok){toast('調唔到：'+((chk.res.find(x=>x[0]==='bad')||[])[1]||'有衝突'));return}
+  if(k.manual&&classOpPending(k.manual)){toast('呢班已有待處理安排');return}
+  const created=!k.manual,id=pinClass(ci),name=className(k);if(id==null)return;
+  queueClassOp('move',[id],[created],{target:{d:f.d,sl:f.sl,r:f.r,tid:f.tid||0}});
+  log(`已通知「${name}」調班：最少七日後生效，屆時會再檢查課室同導師。`,'ai');save();render()}
+function swapClasses(ci,cj){const chk=swapCheck(ci,cj);if(!chk.ok){toast('換唔到：'+chk.why);return}
+  const a=s.classes[ci],b=s.classes[cj];if((a.manual&&classOpPending(a.manual))||(b.manual&&classOpPending(b.manual))){toast('其中一班已有待處理安排');return}
+  const names=[className(a),className(b)],created=[!a.manual,!b.manual],ids=[pinClass(ci),pinClass(cj)];
+  queueClassOp('swap',ids,created,{});log(`已通知「${names[0]}」同「${names[1]}」互換：最少七日後生效，屆時會再檢查。`,'ai');save();render()}
+function reduceClass(ci,choice){const k=s.classes[ci];if(!k)return;if((k.manual&&classOpPending(k.manual))||groupCutPending(k.c,k.g)){toast('呢班或呢組已有待處理安排');return}
+  const pv=cutPreview(ci);if(choice==='now'||!pv.over){applyReduceClass(ci,choice==='now');return}
+  if(choice!=='wait')return;
+  if(groupCutPending(k.c,k.g)){toast('呢組已有待處理減班');return}
+  const id=pinClass(ci),created=!k.manual,now=opDay(),due=(Math.floor(now/28)+1)*28,name=className(k);
+  queueClassOp('cut',[id],[created],{c:k.c,g:k.g,due});
+  log(`已通知「${name}」月底減班：暫停呢組新報讀同候補轉正，等目前收費月份完結。`,'ai');save();render()}
+function cancelClassOp(id){const ops=s.classOps||[],o=ops.find(x=>x.ids.includes(id));if(!o)return;
+  s.classOps=ops.filter(x=>x!==o);o.ids.forEach((v,i)=>releaseOpPin(v,o.created[i]));plan();log('已取消待處理嘅調班／減班安排。','');save();render()}
+function classOpsTick(){const ops=(s.classOps||[]).slice();for(const o of ops){if(opDay()<o.due)continue;
+    const ix=o.ids.map(classIndexByManual);if(ix.some(i=>i<0)){s.classOps=s.classOps.filter(x=>x!==o);o.ids.forEach((v,i)=>releaseOpPin(v,o.created[i]));log('待處理嘅班已無法找到，安排已取消；請檢查時間表。','bad');plan();continue}
+    if(o.kind==='move'){const k=s.classes[ix[0]],f=o.target,chk=newClassCheck({c:k.c,g:k.g,d:f.d,sl:f.sl,r:f.r,tid:f.tid,ex:ix[0]});if(!chk.ok){s.classOps=s.classOps.filter(x=>x!==o);releaseOpPin(o.ids[0],o.created[0]);log(`原定調班未能生效：${(chk.res.find(x=>x[0]==='bad')||[])[1]||'安排有衝突'}；請重新通知。`,'bad');plan();continue}}
+    if(o.kind==='swap'&&!swapCheck(ix[0],ix[1]).ok){s.classOps=s.classOps.filter(x=>x!==o);o.ids.forEach((v,i)=>releaseOpPin(v,o.created[i]));log('原定互換未能生效：時段或導師有衝突；請重新通知。','bad');plan();continue}
+    s.classOps=s.classOps.filter(x=>x!==o);
+    if(o.kind==='move')applyMoveClass(ix[0],o.target);else if(o.kind==='swap')applySwapClasses(ix[0],ix[1]);else applyReduceClass(ix[0],false);
+  }}
 function clearGmax(key){if(s.gmax)delete s.gmax[key];plan();const n=admitWait();log(`取消「${GNAME[key]}」嘅班數限制${n?`，${n} 個候補即刻有位`:''}`,'ok');save();render()}
 // 學生名單：每組一份，人數跟報讀同步
 const EN_SUR={陳:'Chan',李:'Lee',黃:'Wong',張:'Cheung',何:'Ho',林:'Lam',梁:'Leung',吳:'Ng',劉:'Lau',蔡:'Choi',鄭:'Cheng',謝:'Tse',周:'Chow',曾:'Tsang',馮:'Fung',麥:'Mak',袁:'Yuen',葉:'Yip'};
@@ -2206,7 +2241,7 @@ function simDay(){
     for(const [k,,w] of GROUPS[id]){const g=c.g[k];
       const ask=pois(Ed*(sh[id]||0)*w*conv*1.25*famMul(id)*trendMul(id)*starMul(id)*(clashG.has(id+'.'+k)?CLASH_MUL:1));askTot+=ask;
       if(!c.on||!courseActive(id)){if(ask)a.off[id]=(a.off[id]||0)+ask}
-      else if(ask){const room=s.closed?0:Math.max(0,g.cap-g.E),take=Math.min(ask,room);g.E+=take;newS+=take;pr+=take*feeC(id)*dLeft/28;
+      else if(ask){const room=s.closed||groupCutPending(id,k)?0:Math.max(0,g.cap-g.E),take=Math.min(ask,room);g.E+=take;newS+=take;pr+=take*feeC(id)*dLeft/28;
         if(ask>take){g.wait=Math.min(12,g.wait+ask-take);a.wait[id]=(a.wait[id]||0)+ask-take}}
       // 候補太耐冇開班，家長會放棄
       if(g.wait>0){const gone=Math.min(g.wait,pois(g.wait/28));if(gone){g.wait-=gone;full+=gone;a.fullBy[id]=(a.fullBy[id]||0)+gone}}
@@ -2267,6 +2302,7 @@ function endOfDay(){
   simDay();shadowDay();genFeedback(computeLoads(expectedE()));
   s.day++;if(typeof demoTick==='function')setTimeout(demoTick,0);
   if(s.day>=7)weekEnd();
+  classOpsTick();
   if(s.shadow&&s.flags.cross==null&&s.cash+((s.tot&&s.tot.bonus)||0)>=s.shadow.cash+((s.shadow.tot&&s.shadow.tot.bonus)||0)&&s.scen==='ai'){s.flags.cross=s.t;log(`回本：現金追過傳統做法（${wkLabel()}）`,'ok')}
   s.clock=0;
   s.dispCash=s.cash;
@@ -3664,6 +3700,7 @@ function capInfo(){
   return {simul:s.rooms*s.seats,used,est:estCap(s.rooms,s.seats),avg,cls:s.classes.length};
 }
 function toggleCourse(id){const c=s.courses[id],C=CMAP[id];
+  if(c.on&&c.E>0){toast('有學生報讀：請先喺時間表逐班處理減班');return}
   if(!c.on&&C.setup&&!c.bought){if(s.cash<C.setup){toast('現金唔夠買教材器材');return}s.cash-=C.setup;book('equip',C.setup);c.bought=true;log(`買${C.short}教材器材 ${fmt(C.setup)}`,'')}
   c.on=!c.on;if(!c.on&&c.E>0){log(`停開「${CMAP[id].name}」，${c.E} 個報讀要轉走或者退款`,'bad');s.rep-=Math.min(6,c.E*.3);for(const k in c.g){c.g[k].E=0;c.g[k].wait=0}syncE(c);calcS()}else if(c.on)log(`開設「${CMAP[id].name}」`,'ok');plan();save();render()}
 function recruit(id){
@@ -3843,15 +3880,15 @@ function classDetail(ci,bad){realInit();
       <label>導師${sel('tid',tl,mv.tid)}</label></div>
       ${chk?`<div class="chks">${chk.res.filter(x=>x[0]!=='info').map(([lv,tx])=>`<div class="chk ${lv}">${lv==='ok'?'✓':lv==='bad'?'✗':'!'} ${tx}</div>`).join('')}${k.tid!==mv.tid&&k.n?'<div class="chk warn">! 換導師：學生要重新適應，家長可能有意見</div>':''}</div>`:''}
 `;
-    foot+=`<button class="btn pri" data-mvapply ${chk&&chk.ok?'':'disabled'} title="${changed?'':'先喺上面改時段、課室或者導師'}">套用調整</button><button class="btn ghost" data-dupcls>同類再開一班</button>`;
+    foot+=`<button class="btn pri" data-mvapply ${chk&&chk.ok?'':'disabled'} title="${changed?'':'先喺上面改時段、課室或者導師'}">通知調班（一星期後）</button><button class="btn ghost" data-dupcls>同類再開一班</button>`;
   }
   h+=info;
-  const pv=cutPreview(ci);
-  h+=`<h4>減班</h4>`+(PANEL.cut===key?`<div class="chks"><div class="chk warn">呢班 ${pv.n} 人：${[pv.moved?pv.moved+' 個轉去同組其他班':'',pv.toW?pv.toW+' 個入候補':''].filter(Boolean).join('，')||'冇學生受影響'}${pv.over?`${pv.over-pv.toW?`，${pv.over-pv.toW} 個會退出`:''}（候補太耐會走）`:''}。</div><div class="chk info">減咗之後「${className(k)}」最多 ${pv.left} 班，系統唔會自動加返，直至你取消限制。${k.tid&&s.tutors.find(t=>t.id===k.tid)?.type==='pt'?'兼職導師少咗一堂人工。':''}</div></div>
-`
-    :`<p class="eff">${pv.n?`呢班 ${pv.n} 人，${pv.over?`減咗會有 ${pv.over} 個冇位`:'同組其他班坐得落'}。`:'冇學生，減咗可以騰出課室同導師時間。'}</p>`);
+  const pv=cutPreview(ci),op=k.manual&&(s.classOps||[]).find(x=>x.ids.includes(k.manual));
+  const refund=Math.round(pv.over*feeC(k.c)*Math.max(0,(5-week())*7-s.day)/28);
+  const days=(Math.floor(opDay()/28)+1)*28-opDay();
+  h+=`<h4>減班</h4>`+(op?`<div class="chk info">已有${op.kind==='cut'?'減班':'調班'}安排，尚餘 ${Math.max(0,op.due-opDay())} 日。生效時會再檢查。</div>`:PANEL.cut===key?`<div class="chks"><div class="chk warn">呢班 ${pv.n} 人；按目前學位估計，${pv.moved} 人可轉去同組其他班，${pv.over} 人未有位。</div><div class="chk info">${pv.over?`可以等本月課程完結（約 ${days} 日；期間呢組暫停新報讀），或者立即減班，估算退還未上課學費 ${fmt(refund)}，並影響口碑。學費按月計，金額係示範估算。`:'其他同組班有足夠位，可以即刻減班。'}減班後呢組最多 ${pv.left} 班。</div></div>`:`<p class="eff">${pv.n?`呢班 ${pv.n} 人，${pv.over?`估計 ${pv.over} 個學生暫時冇其他同組班位`:'同組其他班坐得落'}。`:'冇學生，可以騰出課室同導師時間。'}</p>`);
   const cutting=PANEL.cut===key;
-  return h+`<div class="tifoot ${cutting?'warnf':''}">${cutting?`<span class="tfs">確定減「${className(k)}」？</span><button class="btn danger" data-cutok>確定減班</button><button class="btn ghost" data-cutno>唔減</button>`:foot+`<button class="btn ghost dang" data-cut>減呢班</button>`}</div>`;
+  return h+`<div class="tifoot ${cutting?'warnf':''}">${op?`<button class="btn ghost" data-opcancel="${k.manual}">取消待處理安排</button>`:cutting?`<span class="tfs">選擇點樣減「${className(k)}」</span>${pv.over?`<button class="btn pri" data-cutok="wait">等已繳月份完結</button><button class="btn danger" data-cutok="now">即刻減班及退款</button>`:`<button class="btn pri" data-cutok="now">確認減班</button>`}<button class="btn ghost" data-cutno>唔減</button>`:foot+`<button class="btn ghost dang" data-cut>減呢班</button>`}</div>`;
 }
 function curSlot(){const h=10+s.clock*12,d=s.day;const sl=daySl(d).findIndex(x=>h>=x[0]&&h<x[1]);return {d,sl,h}}
 function ttNow(){
@@ -5806,7 +5843,8 @@ document.addEventListener('click',ev=>{
   if('mvapply' in ds){const e=selEntry(PANEL.sel);if(e)moveClass(e.ci,PANEL.mv);return}
   if('cut' in ds){const e=selEntry(PANEL.sel);if(!e)return;const k=s.classes[e.ci];PANEL.cut=`${k.c}.${k.g}@${e.d},${e.sl},${e.r}`;renderPanel();return}
   if('cutno' in ds){PANEL.cut=null;renderPanel();return}
-  if('cutok' in ds){const e=selEntry(PANEL.sel);if(e)reduceClass(e.ci);return}
+  if('cutok' in ds){const e=selEntry(PANEL.sel);if(e)reduceClass(e.ci,ds.cutok);return}
+  if(ds.opcancel!=null)return cancelClassOp(+ds.opcancel);
   if(ds.gmaxx)return clearGmax(ds.gmaxx);
   if(ds.frng){PANEL.rng=ds.frng==='yr'||ds.frng==='all'?ds.frng:+ds.frng;renderPanel();return}
   if(ds.fmet){PANEL.met=ds.fmet;renderPanel();return}
